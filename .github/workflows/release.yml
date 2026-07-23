@@ -36,11 +36,12 @@ jobs:
             archive: zip
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install Linux audio headers
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install --yes libasound2-dev
+        timeout-minutes: 5
+        run: sudo apt-get -o Acquire::Retries=3 update && sudo apt-get -o Acquire::Retries=3 install --yes libasound2-dev
 
       - name: Install stable Rust
         uses: dtolnay/rust-toolchain@stable
@@ -72,7 +73,7 @@ jobs:
           $Hash = (Get-FileHash "${{ matrix.asset }}" -Algorithm SHA256).Hash.ToLowerInvariant()
           "$Hash  ${{ matrix.asset }}" | Set-Content -NoNewline "${{ matrix.asset }}.sha256"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: ${{ matrix.asset }}
           path: |
@@ -86,9 +87,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           path: dist
           merge-multiple: true
