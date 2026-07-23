@@ -313,11 +313,10 @@ fn handle_ui_event(event: UiEvent, app: &mut App, audio: Option<&Audio>) {
             transferred,
             total,
         } => {
-            let percent = if total == 0 {
-                100
-            } else {
-                transferred.saturating_mul(100) / total
-            };
+            let percent = transferred
+                .saturating_mul(100)
+                .checked_div(total)
+                .unwrap_or(100);
             app.progress = Some(format!("{label} · {percent}%"));
             if transferred >= total {
                 app.progress = None;
