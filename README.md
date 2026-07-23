@@ -1,249 +1,261 @@
+<div align="center">
+
 # airwire
 
-`airwire` is a cross-platform, terminal-only room for anonymous text, group
-chat, files, media, and live voice. It is written in Rust and uses an
-OpenCode-inspired black/gray TUI.
+### Anonymous Internet Relay With Integrated Routing & Encryption
 
-Developed by **H34TB145T**.
+Accountless, end-to-end encrypted rooms for your terminal.
 
-> Status: early alpha. The cryptographic design has not received an independent
-> security audit. Do not treat anonymity as guaranteed against a global network
-> observer, a compromised endpoint, traffic analysis, or malware.
+[![Release](https://img.shields.io/github/v/release/H34TB145T/airwire?style=flat-square&color=78b8b4)](https://github.com/H34TB145T/airwire/releases/latest)
+[![CI](https://img.shields.io/github/actions/workflow/status/H34TB145T/airwire/ci.yml?style=flat-square&label=build)](https://github.com/H34TB145T/airwire/actions/workflows/ci.yml)
+[![License](https://img.shields.io/github/license/H34TB145T/airwire?style=flat-square)](LICENSE-MIT)
+[![Rust](https://img.shields.io/badge/built_with-Rust-202020?style=flat-square&logo=rust)](https://www.rust-lang.org/)
 
-## What works
+**Text · Groups · Files · Media · Voice · Tor**
 
-- One host creates a random six-character room code.
-- One guest makes a private conversation; additional guests automatically make
-  it a group room.
-- The host can cap guests with `--max-users`.
-- Messages and attachment contents are end-to-end encrypted.
-- `/send <path>` and terminal drag-and-drop send any file or media.
-- `/call` and `/hangup` stream encrypted low-latency voice through the room.
-- A bundled blind relay can run locally, behind TLS, behind Cloudflared/Pinggy,
-  or as a Tor onion service.
-- Linux, macOS, and Windows are supported by the Rust network/TUI/audio stack.
+Developed by **H34TB145T**
 
-## Build
+</div>
 
-Install a current stable Rust toolchain, then:
+> [!WARNING]
+> Airwire is early alpha and has not received an independent security audit.
+> It improves privacy, but cannot guarantee anonymity against compromised
+> devices, malware, traffic analysis, or a global network observer.
+
+## Quick start
+
+### 1. Install
+
+**macOS / Linux**
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/H34TB145T/airwire/main/install.sh | sh
+```
+
+**Windows PowerShell**
+
+```powershell
+irm https://raw.githubusercontent.com/H34TB145T/airwire/main/install.ps1 | iex
+```
+
+### 2. Open a room
+
+| Route | Host command | Best for |
+|---|---|---|
+| Local | `airwire -s` | Same device or custom relay |
+| Cloudflare | `airwire -s -f` | Fast temporary internet rooms |
+| Tor | `airwire -s -t` | Onion-routed rooms |
+
+Limit the room when needed:
+
+```sh
+airwire -s -t --max-users 3
+```
+
+### 3. Share the invitation
+
+Airwire prints one compact command. The guest runs it exactly as shown:
+
+```sh
+# Cloudflare
+airwire aB3xY9@paper-river
+
+# Tor — Tor starts automatically
+airwire aB3xY9@ONION_SERVICE_ID
+```
+
+One guest creates a private chat. More guests automatically create a group.
+
+## What you get
+
+| | |
+|---|---|
+| **No accounts** | Start with a random six-character room code |
+| **Encrypted rooms** | Messages, files, media, and voice use end-to-end encryption |
+| **Group chat** | Every admitted participant receives room traffic |
+| **File drop** | Use `/send` or drag a file into the terminal |
+| **Live voice** | Start and stop an encrypted call inside the TUI |
+| **Flexible routing** | Use Tor, Cloudflare, Pinggy, or your own relay |
+| **Cross-platform** | Windows x86-64/ARM64, macOS Intel/Apple Silicon, Linux x86-64/ARM64 |
+| **No chat history** | Airwire and its relay do not save conversation logs |
+
+## Inside the room
+
+| Command | Action |
+|---|---|
+| `/send <path>` | Send a file or media |
+| `/call` | Start voice |
+| `/hangup` | Stop voice |
+| `/clear` | Clear the screen |
+| `/quit` | Leave the room |
+
+Received files are saved to `Downloads/airwire` by default.
+
+## Update
+
+After the first installation, future upgrades are one command:
+
+```sh
+airwire --update
+```
+
+Airwire replaces the exact executable currently being used. On Windows, it
+waits for `airwire.exe` to close before replacing it and keeps that installation
+first in `PATH`.
+
+## How it works
+
+```text
+host creates room
+       │
+       ▼
+guest joins with CODE@HOST
+       │
+       ▼
+SPAKE2 authenticated key exchange
+       │
+       ▼
+XChaCha20-Poly1305 encrypted room traffic
+       │
+       ▼
+local relay / Cloudflare / Tor / custom relay
+```
+
+The relay forwards opaque packets and keeps room state only in memory.
+
+<details>
+<summary><strong>Routing options</strong></summary>
+
+### Cloudflare
+
+Install
+[cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/),
+then run:
+
+```sh
+airwire -s -f
+```
+
+Airwire starts a temporary Quick Tunnel and prints an invitation such as
+`airwire aB3xY9@paper-river`.
+
+### Tor
+
+```sh
+airwire -s -t
+```
+
+Airwire finds Tor, starts an isolated session, creates a temporary v3 onion
+service, and removes its temporary state when the room closes. Windows installs
+the Tor Expert Bundle automatically; supported macOS/Linux systems offer
+interactive setup when Tor is missing.
+
+Tor service IDs remain 56 characters because shortening them would require a
+separate lookup service.
+
+### Existing SOCKS5 proxy
+
+```sh
+airwire -c aB3xY9 -r ws://ADDRESS.onion/ws -t 127.0.0.1:9050
+```
+
+Tor Browser commonly uses port `9150`; the standalone Tor daemon commonly uses
+`9050`.
+
+### Shared relay
+
+```sh
+airwire relay --listen 127.0.0.1:8787
+```
+
+Expose `/ws` through HTTPS, then:
+
+```sh
+export AIRWIRE_RELAY=wss://relay.example/ws
+airwire -s
+airwire -c aB3xY9
+```
+
+Pinggy and similar tunnels can expose `http://127.0.0.1:8787`; use their public
+address as `wss://HOST/ws`.
+
+</details>
+
+<details>
+<summary><strong>Security notes</strong></summary>
+
+- SPAKE2 authenticates the host-to-guest key exchange.
+- XChaCha20-Poly1305 protects chat, files, media, and voice.
+- Files stream in encrypted chunks and are verified with SHA-256.
+- The relay sees connection metadata, timing, direction, approximate sizes,
+  room membership, and a two-character rendezvous prefix.
+- The remaining four room-code characters stay inside the SPAKE2 exchange.
+- The bundled relay limits each active room to 60 join attempts per minute.
+- Every room participant receives the group key and can read group traffic.
+- Display names are temporary labels, not verified identities.
+
+Six-character codes are convenient, not high-entropy passwords. Share
+invitations privately, limit guests, and close rooms when finished.
+
+</details>
+
+<details>
+<summary><strong>Installation details</strong></summary>
+
+| Platform | Default executable |
+|---|---|
+| macOS / Linux | `~/.local/bin/airwire` |
+| Windows | `%LOCALAPPDATA%\Airwire\bin\airwire.exe` |
+
+Installers select the correct release, verify its SHA-256 checksum, and update
+the current user's `PATH`.
+
+Useful overrides:
+
+| Variable | Purpose |
+|---|---|
+| `AIRWIRE_VERSION` | Install a specific tag, such as `v0.2.3` |
+| `AIRWIRE_INSTALL_DIR` | Change the executable directory |
+| `AIRWIRE_TOR_DIR` | Change the Windows Tor bundle directory |
+| `AIRWIRE_TOR_BINARY` | Use a specific Tor executable |
+| `AIRWIRE_RELAY` | Set the default WebSocket relay |
+
+</details>
+
+<details>
+<summary><strong>Build and development</strong></summary>
+
+Build with a current stable Rust toolchain:
 
 ```sh
 cargo build --release
 ./target/release/airwire --help
 ```
 
-Voice is enabled by default. On Linux, the CPAL backend normally requires the
-ALSA development package (`libasound2-dev` on Debian/Ubuntu). A headless relay
-can be built without audio:
+Linux voice support normally requires the ALSA development package
+(`libasound2-dev` on Debian/Ubuntu). Build without audio for a headless relay:
 
 ```sh
 cargo build --release --no-default-features
 ```
 
-## Install
-
-Release installers select the correct binary for macOS, Linux, or Windows,
-verify its SHA-256 checksum, install it for the current user, and add Airwire to
-`PATH` when necessary.
-
-macOS or Linux:
+Run the project checks:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/H34TB145T/airwire/main/install.sh | sh
-```
-
-Windows PowerShell:
-
-```powershell
-irm https://raw.githubusercontent.com/H34TB145T/airwire/main/install.ps1 | iex
-```
-
-The default locations are `~/.local/bin/airwire` on macOS/Linux and
-`%LOCALAPPDATA%\Airwire\bin\airwire.exe` on Windows. Set
-`AIRWIRE_INSTALL_DIR` before running an installer to override the location.
-The Windows installer also downloads Tor Project's checksum-verified Expert
-Bundle to `%LOCALAPPDATA%\Airwire\tor-expert`, detects an existing Tor
-installation when possible, and saves its exact path in
-`AIRWIRE_TOR_BINARY`. Set `AIRWIRE_TOR_DIR` to override the bundled Tor
-location.
-
-Installers use the latest GitHub release by default. Set `AIRWIRE_VERSION` to a
-tag such as `v0.2.0` to install a specific release.
-
-## Use
-
-The host command automatically starts a local relay:
-
-```sh
-airwire --start
-airwire --start --max-users 4
-# Short form:
-airwire -s
-```
-
-Another terminal on the same machine can join with:
-
-```sh
-airwire --connect aB3xY9
-```
-
-For an internet room with no account, install
-[cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/)
-and run:
-
-```sh
-airwire --start --cloudflared
-# Short form:
-airwire -s -f
-```
-
-The footer prints a compact invitation shaped like:
-
-```sh
-airwire aB3xY9@paper-river
-```
-
-Airwire restores the `.trycloudflare.com` suffix and infers the secure
-WebSocket scheme and `/ws` path. Cloudflare Quick Tunnel URLs are temporary.
-The room code alone is enough only when everyone uses the same configured
-relay; code-to-endpoint discovery necessarily requires shared infrastructure.
-
-For an internet room carried entirely through Tor:
-
-```sh
-airwire --start --tor-proxy
-# Short form:
-airwire -s -t
-```
-
-Airwire finds Tor, offers to install it interactively on supported macOS/Linux
-systems when it is missing, starts an isolated temporary Tor client, creates a
-fresh v3 onion service, and prints the complete guest command. No `torrc`
-editing or background Tor service is required.
-
-Inside the UI:
-
-```text
-/send ./photo.png
-/call
-/hangup
-/clear
-/quit
-```
-
-Dropping a file from Finder, Explorer, or a desktop file manager into the input
-line also sends it. Received files go to the user's Downloads/airwire directory
-unless `--downloads` is supplied.
-
-## Run a shared relay
-
-```sh
-airwire relay --listen 127.0.0.1:8787
-```
-
-Put `/ws` behind a normal HTTPS reverse proxy, then hosts and guests use the
-same URL:
-
-```sh
-export AIRWIRE_RELAY=wss://relay.example/ws
-airwire --start
-airwire --connect aB3xY9
-```
-
-The relay stores no history and sees opaque application packets. It sees only
-the first two characters of a room code for rendezvous, plus connection IPs
-(unless hidden by a proxy), timing, membership, direction, and approximate
-packet sizes. The remaining four characters stay inside the SPAKE2 exchange.
-
-### Tor
-
-Automatic mode is intended for quick private rooms:
-
-```sh
-airwire --start --tor-proxy
-```
-
-It launches a separate Tor process with temporary state and onion keys. Airwire
-stops that process and removes its temporary data when the room closes. The
-host receives a compact guest command shaped like:
-
-```sh
-airwire aB3xY9@ONION_SERVICE_ID
-```
-
-An `.onion` compact invitation automatically starts an isolated Tor client and
-retries while a fresh onion service propagates. Initial Tor connections can
-take around a minute. If Tor is outside `PATH`, use `--tor-binary /path/to/tor`
-or set `AIRWIRE_TOR_BINARY`. On Windows, Airwire also discovers the Expert
-Bundle installed by `install.ps1` and common Tor Browser locations.
-
-Tor v3 service IDs are intentionally 56 characters and cannot be shortened
-further without a separate lookup service. Compact invitations remove the
-`.onion` suffix, URL scheme, path, and command switches while keeping the
-connection direct and avoiding a third-party URL-shortener mapping.
-
-Advanced users may keep routing through an already-running SOCKS5 proxy by
-supplying its address explicitly:
-
-```sh
-airwire --connect aB3xY9 --relay ws://ADDRESS.onion/ws \
-  --tor-proxy 127.0.0.1:9050
-```
-
-Using Tor generally improves source-address privacy but is slower, especially
-for voice and large files. Tor Browser's SOCKS port is commonly `9150`; the
-standalone Tor daemon commonly uses `9050`.
-
-### Pinggy or another tunnel
-
-Run the local relay, expose `http://127.0.0.1:8787` with the tunnel provider,
-convert its public HTTPS address to `wss://.../ws`, and supply that value through
-`AIRWIRE_RELAY`. The tunnel carries encrypted Airwire packets but remains able
-to observe traffic metadata.
-
-## Security design
-
-```text
-six-character code
-        │
-        ▼
-SPAKE2 authenticated key exchange (host ↔ each guest)
-        │
-        ▼
-high-entropy room key, delivered over each pairwise encrypted channel
-        │
-        ▼
-XChaCha20-Poly1305 authenticated encryption for chat/files/voice
-        │
-        ▼
-blind WebSocket relay / Cloudflared / Tor / Pinggy
-```
-
-SPAKE2 prevents a passive relay from using captured handshakes for an offline
-guess of the four code characters that are not used for rendezvous. The random
-code is still short, and the relay learns its two-character rendezvous prefix,
-so an attacker can try active online guesses while the room exists. Use guest
-limits, share codes privately, close rooms when finished, and operate a
-rate-limited relay for hostile environments. The bundled relay limits each
-active room to 60 join attempts per minute.
-
-Each room participant receives the group key. Consequently, any admitted
-participant can read group traffic and can technically impersonate another
-display name. Display names are deliberately ephemeral and are not identities.
-Files are streamed in encrypted chunks and verified with SHA-256 before the
-`.airwire-part` file is renamed.
-
-Airwire does not write chat logs. Received attachments are intentionally written
-to disk. The relay is memory-only and drops room state when the host disconnects.
-
-## Development
-
-```sh
-cargo fmt --check
+cargo fmt --all -- --check
 cargo clippy --all-targets --all-features -- -D warnings
 cargo test --all-features
 ```
 
-Pushing a `v*` tag runs the release workflow. It builds and publishes checked
-archives for Linux x86-64/ARM64, macOS Intel/Apple Silicon, and Windows
-x86-64/ARM64. The installer scripts download those release assets.
+Pushing a `v*` tag builds checked archives for all supported platforms and
+publishes them as a GitHub Release.
+
+</details>
+
+---
+
+<div align="center">
+
+**Open a room. Share one line. Leave no chat log.**
+
+</div>

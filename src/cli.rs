@@ -33,6 +33,13 @@ pub struct Cli {
     )]
     pub invite: Option<String>,
 
+    /// Download and install the latest Airwire release.
+    #[arg(
+        long,
+        conflicts_with_all = ["invite", "start", "connect", "cloudflared"]
+    )]
+    pub update: bool,
+
     /// Start and host a new room.
     #[arg(short = 's', long, conflicts_with = "connect")]
     pub start: bool,
@@ -62,12 +69,7 @@ pub struct Cli {
     pub tor_proxy: Option<String>,
 
     /// Tor executable used by automatic Tor mode.
-    #[arg(
-        long,
-        env = "AIRWIRE_TOR_BINARY",
-        value_name = "PATH",
-        requires = "tor_proxy"
-    )]
+    #[arg(long, env = "AIRWIRE_TOR_BINARY", value_name = "PATH")]
     pub tor_binary: Option<PathBuf>,
 
     /// Start an ephemeral Cloudflare Quick Tunnel for the embedded relay.
@@ -236,6 +238,24 @@ mod tests {
     }
 
     #[test]
+    fn installed_tor_path_does_not_block_a_compact_invitation() {
+        let service_id = "a".repeat(56);
+        let cli = Cli::try_parse_from([
+            "airwire",
+            "--tor-binary",
+            r"C:\Users\tester\AppData\Local\Airwire\tor-expert\tor\tor.exe",
+            &format!("aB3xY9@{service_id}"),
+        ])
+        .unwrap();
+
+        assert_eq!(
+            cli.invite.as_deref(),
+            Some(format!("aB3xY9@{service_id}").as_str())
+        );
+        assert!(cli.tor_binary.is_some());
+    }
+
+    #[test]
     fn rejects_invalid_compact_invitations() {
         assert!(parse_compact_invite("short@relay.example").is_err());
         assert!(parse_compact_invite("aB3xY9@short.onion").is_err());
@@ -251,6 +271,13 @@ mod tests {
         let cli = Cli::try_parse_from(["airwire", "-c", "aB3xY9", "-r", "wss://relay/ws"]).unwrap();
         assert_eq!(cli.connect.as_deref(), Some("aB3xY9"));
         assert_eq!(cli.relay, "wss://relay/ws");
+    }
+
+    #[test]
+    fn update_switch_is_available_by_itself() {
+        let cli = Cli::try_parse_from(["airwire", "--update"]).unwrap();
+        assert!(cli.update);
+        assert!(Cli::try_parse_from(["airwire", "--update", "--start"]).is_err());
     }
 
     #[test]

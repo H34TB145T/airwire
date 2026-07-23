@@ -90,6 +90,21 @@ function Assert-Sha256 {
     }
 }
 
+function Get-NormalizedPathEntry {
+    param([string]$Entry)
+
+    if ([string]::IsNullOrWhiteSpace($Entry)) {
+        return ""
+    }
+    $Expanded = [Environment]::ExpandEnvironmentVariables($Entry.Trim())
+    try {
+        $Expanded = [System.IO.Path]::GetFullPath($Expanded)
+    } catch {
+        # Preserve legacy PATH text that cannot be normalized.
+    }
+    return $Expanded.TrimEnd([char[]]"\/")
+}
+
 $Architecture = $env:PROCESSOR_ARCHITEW6432
 if ([string]::IsNullOrWhiteSpace($Architecture)) {
     $Architecture = $env:PROCESSOR_ARCHITECTURE
@@ -189,24 +204,41 @@ try {
     New-Item -ItemType Directory -Force -Path $InstallDirectory | Out-Null
     Copy-Item $Executable (Join-Path $InstallDirectory "airwire.exe") -Force
 
+    # Always select the newly installed executable. Checking only whether this
+    # directory exists in PATH can leave an older Cargo copy ahead of it.
+    $NormalizedInstallDirectory = Get-NormalizedPathEntry $InstallDirectory
     $UserPath = [Environment]::GetEnvironmentVariable("Path", "User")
     $PathEntries = if ([string]::IsNullOrWhiteSpace($UserPath)) {
         @()
     } else {
         @($UserPath -split ";" | Where-Object { $_ })
     }
-    if ($PathEntries -notcontains $InstallDirectory) {
-        $UpdatedPath = (@($InstallDirectory) + $PathEntries) -join ";"
+    $OtherUserPathEntries = @($PathEntries | Where-Object {
+        -not [string]::Equals(
+            (Get-NormalizedPathEntry $_),
+            $NormalizedInstallDirectory,
+            [System.StringComparison]::OrdinalIgnoreCase
+        )
+    })
+    $UpdatedPath = (@($InstallDirectory) + $OtherUserPathEntries) -join ";"
+    if ($UpdatedPath -ne $UserPath) {
         [Environment]::SetEnvironmentVariable("Path", $UpdatedPath, "User")
-        Write-Host "Added $InstallDirectory to your user PATH."
+        Write-Host "Set $InstallDirectory as the first user PATH entry."
     }
-    if (($env:Path -split ";") -notcontains $InstallDirectory) {
-        $env:Path = "$InstallDirectory;$env:Path"
-    }
+
+    $CurrentPathEntries = @($env:Path -split ";" | Where-Object { $_ })
+    $OtherCurrentPathEntries = @($CurrentPathEntries | Where-Object {
+        -not [string]::Equals(
+            (Get-NormalizedPathEntry $_),
+            $NormalizedInstallDirectory,
+            [System.StringComparison]::OrdinalIgnoreCase
+        )
+    })
+    $env:Path = (@($InstallDirectory) + $OtherCurrentPathEntries) -join ";"
 
     & (Join-Path $InstallDirectory "airwire.exe") --version
     Write-Host "Installed Airwire to $(Join-Path $InstallDirectory 'airwire.exe')"
-    Write-Host "Open a new terminal, then run: airwire --start"
+    Write-Host "Run: airwire --start"
 } finally {
     Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $TemporaryDirectory
 }
