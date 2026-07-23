@@ -4,6 +4,7 @@ mod client;
 mod crypto;
 mod protocol;
 mod relay;
+mod tor;
 mod tui;
 mod tunnel;
 
@@ -16,9 +17,10 @@ use tokio::sync::mpsc;
 use tracing_subscriber::EnvFilter;
 
 use crate::{
-    cli::{Cli, Command, DEFAULT_RELAY},
+    cli::{Cli, Command, DEFAULT_RELAY, MANAGED_TOR},
     client::{ClientConfig, NetCommand, Role, UiEvent},
     protocol::{generate_code, validate_code},
+    tor::{ManagedTor, ManagedTorMode},
     tui::ViewConfig,
 };
 
@@ -59,6 +61,10 @@ async fn main() -> Result<()> {
     } else {
         Role::Guest
     };
+    let automatic_tor = cli.tor_proxy.as_deref() == Some(MANAGED_TOR);
+    if automatic_tor && !is_host && cli.relay == DEFAULT_RELAY {
+        bail!("a Tor guest needs the host's onion relay URL; use --relay ws://ADDRESS.onion/ws");
+    }
 
     let mut embedded_relay = None;
     if is_host && cli.relay == DEFAULT_RELAY {
@@ -77,8 +83,40 @@ async fn main() -> Result<()> {
         }
     }
 
+    let mut public_relay_url = cli.relay.clone();
+    let mut client_relay_url = cli.relay.clone();
+    let mut tor_proxy = cli.tor_proxy.clone().filter(|proxy| proxy != MANAGED_TOR);
+    let mut managed_tor = None;
+    if automatic_tor {
+        let binary = tor::ensure_tor_binary(cli.tor_binary.as_deref()).await?;
+        let mode = if is_host && cli.relay == DEFAULT_RELAY {
+            ManagedTorMode::OnionService {
+                target: "127.0.0.1:8787".parse().expect("static address"),
+            }
+        } else {
+            ManagedTorMode::Client
+        };
+        let instance = ManagedTor::start(&binary, mode).await?;
+        if let Some(onion_url) = &instance.onion_relay_url {
+            public_relay_url.clone_from(onion_url);
+            client_relay_url = DEFAULT_RELAY.into();
+            tor_proxy = None;
+        } else {
+            tor_proxy = Some(instance.proxy_address.clone());
+        }
+        managed_tor = Some(instance);
+    }
+
     let mut cloudflared = None;
-    let relay_display = if cli.cloudflared {
+    let mut startup_message = None;
+    let relay_display = if let Some(instance) = &managed_tor
+        && let Some(onion_url) = &instance.onion_relay_url
+    {
+        let invitation = format!("airwire --connect {code} --relay {onion_url} --tor-proxy");
+        println!("\nTor invitation (share this entire command):\n{invitation}\n");
+        startup_message = Some(invitation);
+        "Tor onion active · share the invitation shown in messages".into()
+    } else if cli.cloudflared {
         if cli.relay != DEFAULT_RELAY {
             bail!("--cloudflared manages the default embedded relay; omit --relay");
         }
@@ -87,20 +125,22 @@ async fn main() -> Result<()> {
             "share: AIRWIRE_RELAY={} airwire --connect {}",
             tunnel.public_relay_url, code
         );
+        startup_message = Some(share.clone());
         cloudflared = Some(tunnel);
         share
     } else if is_host && cli.relay == DEFAULT_RELAY {
         format!("local relay · airwire --connect {code}")
     } else {
-        cli.relay.clone()
+        public_relay_url
     };
 
     let downloads = cli.downloads.unwrap_or_else(default_downloads);
     let client_config = ClientConfig {
         role,
         code: code.clone(),
-        relay_url: cli.relay.clone(),
-        tor_proxy: cli.tor_proxy.clone(),
+        relay_url: client_relay_url,
+        tor_proxy,
+        retry_connect: automatic_tor && !is_host,
         alias: cli.name,
         downloads,
     };
@@ -118,6 +158,7 @@ async fn main() -> Result<()> {
             relay_display,
             is_host,
             voice_enabled: !cli.no_voice,
+            startup_message,
         },
         command_tx,
         event_rx,
@@ -129,6 +170,9 @@ async fn main() -> Result<()> {
         task.abort();
     }
     drop(cloudflared);
+    if let Some(instance) = &mut managed_tor {
+        instance.shutdown().await;
+    }
     result
 }
 

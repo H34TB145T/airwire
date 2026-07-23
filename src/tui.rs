@@ -43,6 +43,7 @@ pub struct ViewConfig {
     pub relay_display: String,
     pub is_host: bool,
     pub voice_enabled: bool,
+    pub startup_message: Option<String>,
 }
 
 struct Entry {
@@ -75,14 +76,22 @@ pub async fn run(
     mut events: mpsc::Receiver<UiEvent>,
 ) -> Result<()> {
     let mut terminal = TerminalGuard::new()?;
+    let mut entries = vec![Entry {
+        label: "airwire".into(),
+        body: "Type /help for commands. Drag a file into this terminal to send it.".into(),
+        tone: Tone::Status,
+    }];
+    if let Some(invitation) = &config.startup_message {
+        entries.push(Entry {
+            label: "share".into(),
+            body: invitation.clone(),
+            tone: Tone::Status,
+        });
+    }
     let mut app = App {
         config,
         input: String::new(),
-        entries: vec![Entry {
-            label: "airwire".into(),
-            body: "Type /help for commands. Drag a file into this terminal to send it.".into(),
-            tone: Tone::Status,
-        }],
+        entries,
         connection: "connecting…".into(),
         secure: false,
         peers: 1,

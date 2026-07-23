@@ -1,6 +1,6 @@
 [package]
 name = "airwire"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 authors = ["H34TB145T"]
 description = "Anonymous, end-to-end encrypted terminal chat"
@@ -31,13 +31,11 @@ spake2 = "0.4"
 tokio = { version = "1.44", features = ["full"] }
 tokio-socks = "0.5"
 tokio-tungstenite = { version = "0.29", features = ["rustls-tls-webpki-roots"] }
+tempfile = "3.18"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 url = "2.5"
 zeroize = { version = "1.8", features = ["derive"] }
-
-[dev-dependencies]
-tempfile = "3.18"
 
 [profile.release]
 lto = "thin"

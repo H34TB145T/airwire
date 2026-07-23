@@ -63,7 +63,7 @@ The default locations are `~/.local/bin/airwire` on macOS/Linux and
 `AIRWIRE_INSTALL_DIR` before running an installer to override the location.
 
 Installers use the latest GitHub release by default. Set `AIRWIRE_VERSION` to a
-tag such as `v0.1.0` to install a specific release.
+tag such as `v0.2.0` to install a specific release.
 
 ## Use
 
@@ -92,6 +92,17 @@ The footer prints the exact `AIRWIRE_RELAY=... airwire --connect CODE` command
 to share. Cloudflare Quick Tunnel URLs are temporary. The room code alone is
 enough only when everyone uses the same configured relay; code-to-endpoint
 discovery necessarily requires shared infrastructure.
+
+For an internet room carried entirely through Tor:
+
+```sh
+airwire --start --tor-proxy
+```
+
+Airwire finds Tor, offers to install it interactively on supported macOS/Linux
+systems when it is missing, starts an isolated temporary Tor client, creates a
+fresh v3 onion service, and prints the complete guest command. No `torrc`
+editing or background Tor service is required.
 
 Inside the UI:
 
@@ -129,14 +140,33 @@ packet sizes. The remaining four characters stay inside the SPAKE2 exchange.
 
 ### Tor
 
-Expose the relay as a Tor onion service and point its virtual port at
-`127.0.0.1:8787`. Clients route the WebSocket connection through Tor's SOCKS5
-listener:
+Automatic mode is intended for quick private rooms:
 
 ```sh
-export AIRWIRE_RELAY=ws://your-service-address.onion/ws
-airwire --start --tor-proxy 127.0.0.1:9050
-airwire --connect aB3xY9 --tor-proxy 127.0.0.1:9050
+airwire --start --tor-proxy
+```
+
+It launches a separate Tor process with temporary state and onion keys. Airwire
+stops that process and removes its temporary data when the room closes. The
+host receives a guest command shaped like:
+
+```sh
+airwire --connect aB3xY9 --relay ws://ADDRESS.onion/ws --tor-proxy
+```
+
+The guest's bare `--tor-proxy` also starts an isolated Tor client
+automatically and retries while a fresh onion service propagates. Initial Tor
+connections can take around a minute. If Tor is outside `PATH`, use
+`--tor-binary /path/to/tor` or set `AIRWIRE_TOR_BINARY`. On Windows, Airwire
+also searches common Tor Browser locations and otherwise asks for the
+executable path.
+
+Advanced users may keep routing through an already-running SOCKS5 proxy by
+supplying its address explicitly:
+
+```sh
+airwire --connect aB3xY9 --relay ws://ADDRESS.onion/ws \
+  --tor-proxy 127.0.0.1:9050
 ```
 
 Using Tor generally improves source-address privacy but is slower, especially

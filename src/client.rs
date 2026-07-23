@@ -1,7 +1,7 @@
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 use anyhow::{Context, Result, anyhow, bail};
@@ -31,6 +31,8 @@ use crate::{
 
 const MAX_CHAT_CHARS: usize = 8_000;
 const MAX_ALIAS_CHARS: usize = 32;
+const TOR_CONNECT_ATTEMPT_TIMEOUT: Duration = Duration::from_secs(20);
+const TOR_CONNECT_RETRY_WINDOW: Duration = Duration::from_secs(90);
 
 #[derive(Debug, Clone)]
 pub enum Role {
@@ -44,6 +46,7 @@ pub struct ClientConfig {
     pub code: String,
     pub relay_url: String,
     pub tor_proxy: Option<String>,
+    pub retry_connect: bool,
     pub alias: String,
     pub downloads: PathBuf,
 }
@@ -138,7 +141,13 @@ pub async fn run(
         .await
         .with_context(|| format!("cannot create {}", config.downloads.display()))?;
 
-    let mut socket = connect(&config.relay_url, config.tor_proxy.as_deref()).await?;
+    let mut socket = connect_with_retry(
+        &config.relay_url,
+        config.tor_proxy.as_deref(),
+        config.retry_connect,
+        &events,
+    )
+    .await?;
     let registration = match config.role {
         Role::Host { max_guests } => RelayCommand::Host {
             version: PROTOCOL_VERSION,
@@ -833,6 +842,42 @@ async fn connect(
     Ok(socket)
 }
 
+async fn connect_with_retry(
+    relay_url: &str,
+    tor_proxy: Option<&str>,
+    retry: bool,
+    events: &mpsc::Sender<UiEvent>,
+) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>> {
+    let deadline = tokio::time::Instant::now() + TOR_CONNECT_RETRY_WINDOW;
+    let mut attempt = 0_u32;
+    loop {
+        attempt += 1;
+        let connection = if retry {
+            match tokio::time::timeout(TOR_CONNECT_ATTEMPT_TIMEOUT, connect(relay_url, tor_proxy))
+                .await
+            {
+                Ok(result) => result,
+                Err(_) => Err(anyhow!(
+                    "timed out connecting to {relay_url} through the managed Tor session"
+                )),
+            }
+        } else {
+            connect(relay_url, tor_proxy).await
+        };
+        match connection {
+            Ok(socket) => return Ok(socket),
+            Err(_error) if retry && tokio::time::Instant::now() < deadline => {
+                if attempt == 1 {
+                    let _ = events
+                        .try_send(UiEvent::Status("waiting for the Tor onion service…".into()));
+                }
+                tokio::time::sleep(Duration::from_secs(u64::from(attempt.min(5)))).await;
+            }
+            Err(error) => return Err(error),
+        }
+    }
+}
+
 fn unix_time_ms() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -972,6 +1017,7 @@ mod tests {
                 code: "aB3xY9".into(),
                 relay_url: relay_url.clone(),
                 tor_proxy: None,
+                retry_connect: false,
                 alias: "host".into(),
                 downloads: host_downloads.path().into(),
             },
@@ -986,6 +1032,7 @@ mod tests {
                 code: "aB3xY9".into(),
                 relay_url,
                 tor_proxy: None,
+                retry_connect: false,
                 alias: "guest".into(),
                 downloads: guest_downloads.path().into(),
             },
@@ -1002,6 +1049,7 @@ mod tests {
                 code: "aB3xY9".into(),
                 relay_url: format!("ws://{relay_address}/ws"),
                 tor_proxy: None,
+                retry_connect: false,
                 alias: "second".into(),
                 downloads: second_guest_downloads.path().into(),
             },
