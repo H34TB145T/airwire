@@ -1,6 +1,6 @@
 [package]
 name = "airwire"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2024"
 authors = ["H34TB145T"]
 description = "Anonymous, end-to-end encrypted terminal chat"

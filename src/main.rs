@@ -17,7 +17,9 @@ use tokio::sync::mpsc;
 use tracing_subscriber::EnvFilter;
 
 use crate::{
-    cli::{Cli, Command, DEFAULT_RELAY, MANAGED_TOR},
+    cli::{
+        Cli, Command, DEFAULT_RELAY, MANAGED_TOR, compact_invitation_command, parse_compact_invite,
+    },
     client::{ClientConfig, NetCommand, Role, UiEvent},
     protocol::{generate_code, validate_code},
     tor::{ManagedTor, ManagedTorMode},
@@ -27,7 +29,16 @@ use crate::{
 #[tokio::main]
 async fn main() -> Result<()> {
     init_logging();
-    let cli = Cli::parse();
+    let mut cli = Cli::parse();
+
+    if let Some(invitation) = cli.invite.clone() {
+        let invitation = parse_compact_invite(&invitation)?;
+        cli.connect = Some(invitation.code);
+        cli.relay = invitation.relay_url;
+        if invitation.managed_tor {
+            cli.tor_proxy = Some(MANAGED_TOR.into());
+        }
+    }
 
     if let Some(Command::Relay { listen }) = cli.command {
         println!("airwire relay listening on {listen}");
@@ -112,8 +123,8 @@ async fn main() -> Result<()> {
     let relay_display = if let Some(instance) = &managed_tor
         && let Some(onion_url) = &instance.onion_relay_url
     {
-        let invitation = format!("airwire --connect {code} --relay {onion_url} --tor-proxy");
-        println!("\nTor invitation (share this entire command):\n{invitation}\n");
+        let invitation = compact_invitation_command(&code, onion_url)?;
+        println!("\nTor invitation (share this compact command):\n{invitation}\n");
         startup_message = Some(invitation);
         "Tor onion active · share the invitation shown in messages".into()
     } else if cli.cloudflared {
@@ -121,15 +132,12 @@ async fn main() -> Result<()> {
             bail!("--cloudflared manages the default embedded relay; omit --relay");
         }
         let tunnel = tunnel::CloudflaredTunnel::start("http://127.0.0.1:8787").await?;
-        let share = format!(
-            "share: AIRWIRE_RELAY={} airwire --connect {}",
-            tunnel.public_relay_url, code
-        );
+        let share = compact_invitation_command(&code, &tunnel.public_relay_url)?;
         startup_message = Some(share.clone());
         cloudflared = Some(tunnel);
         share
     } else if is_host && cli.relay == DEFAULT_RELAY {
-        format!("local relay · airwire --connect {code}")
+        format!("local relay · airwire -c {code}")
     } else {
         public_relay_url
     };
