@@ -307,6 +307,9 @@ fn find_common_tor_binary() -> Option<PathBuf> {
     }
     #[cfg(windows)]
     {
+        if let Some(directory) = env::var_os("LOCALAPPDATA") {
+            candidates.push(PathBuf::from(directory).join("Airwire\\tor-expert\\tor\\tor.exe"));
+        }
         for variable in ["LOCALAPPDATA", "PROGRAMFILES", "PROGRAMFILES(X86)"] {
             if let Some(directory) = env::var_os(variable) {
                 candidates.push(

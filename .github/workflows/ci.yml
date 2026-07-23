@@ -25,6 +25,20 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Test Windows installer with Windows PowerShell
+        if: runner.os == 'Windows'
+        shell: powershell
+        env:
+          AIRWIRE_INSTALL_DIR: ${{ runner.temp }}\airwire-installer-test
+          AIRWIRE_TOR_DIR: ${{ runner.temp }}\airwire-tor-test
+        run: |
+          & .\install.ps1
+          & "$env:AIRWIRE_INSTALL_DIR\airwire.exe" --version
+          if (-not (Test-Path -LiteralPath $env:AIRWIRE_TOR_BINARY -PathType Leaf)) {
+            throw "The installer did not configure AIRWIRE_TOR_BINARY"
+          }
+          & $env:AIRWIRE_TOR_BINARY --version
+
       - name: Install Linux audio headers
         if: runner.os == 'Linux'
         timeout-minutes: 5
