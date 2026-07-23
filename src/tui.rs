@@ -8,7 +8,7 @@ use anyhow::{Context, Result};
 use crossterm::{
     event::{
         DisableBracketedPaste, EnableBracketedPaste, Event, EventStream, KeyCode, KeyEvent,
-        KeyModifiers,
+        KeyEventKind, KeyModifiers,
     },
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
@@ -152,6 +152,10 @@ fn handle_terminal_event(
     audio: &mut Option<Audio>,
 ) {
     match event {
+        Event::Key(KeyEvent {
+            kind: KeyEventKind::Release,
+            ..
+        }) => {}
         Event::Key(KeyEvent {
             code: KeyCode::Char('c'),
             modifiers,
@@ -532,6 +536,55 @@ impl Drop for TerminalGuard {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn test_app() -> App {
+        App {
+            config: ViewConfig {
+                code: "aB3xY9".into(),
+                relay_display: "test relay".into(),
+                is_host: false,
+                voice_enabled: false,
+                startup_message: None,
+            },
+            input: String::new(),
+            entries: Vec::new(),
+            connection: "testing".into(),
+            secure: true,
+            peers: 2,
+            should_quit: false,
+            progress: None,
+        }
+    }
+
+    #[test]
+    fn ignores_windows_style_key_release_events() {
+        let (network, _receiver) = mpsc::channel(1);
+        let mut app = test_app();
+        let mut audio = None;
+
+        handle_terminal_event(
+            Event::Key(KeyEvent::new_with_kind(
+                KeyCode::Char('a'),
+                KeyModifiers::NONE,
+                KeyEventKind::Press,
+            )),
+            &mut app,
+            &network,
+            &mut audio,
+        );
+        handle_terminal_event(
+            Event::Key(KeyEvent::new_with_kind(
+                KeyCode::Char('a'),
+                KeyModifiers::NONE,
+                KeyEventKind::Release,
+            )),
+            &mut app,
+            &network,
+            &mut audio,
+        );
+
+        assert_eq!(app.input, "a");
+    }
 
     #[test]
     fn accepts_quoted_and_escaped_drag_paths() {

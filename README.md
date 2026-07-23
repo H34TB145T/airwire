@@ -61,6 +61,11 @@ irm https://raw.githubusercontent.com/H34TB145T/airwire/main/install.ps1 | iex
 The default locations are `~/.local/bin/airwire` on macOS/Linux and
 `%LOCALAPPDATA%\Airwire\bin\airwire.exe` on Windows. Set
 `AIRWIRE_INSTALL_DIR` before running an installer to override the location.
+The Windows installer also downloads Tor Project's checksum-verified Expert
+Bundle to `%LOCALAPPDATA%\Airwire\tor-expert`, detects an existing Tor
+installation when possible, and saves its exact path in
+`AIRWIRE_TOR_BINARY`. Set `AIRWIRE_TOR_DIR` to override the bundled Tor
+location.
 
 Installers use the latest GitHub release by default. Set `AIRWIRE_VERSION` to a
 tag such as `v0.2.0` to install a specific release.
@@ -158,8 +163,8 @@ The guest's bare `--tor-proxy` also starts an isolated Tor client
 automatically and retries while a fresh onion service propagates. Initial Tor
 connections can take around a minute. If Tor is outside `PATH`, use
 `--tor-binary /path/to/tor` or set `AIRWIRE_TOR_BINARY`. On Windows, Airwire
-also searches common Tor Browser locations and otherwise asks for the
-executable path.
+also discovers the Expert Bundle installed by `install.ps1` and common Tor
+Browser locations.
 
 Advanced users may keep routing through an already-running SOCKS5 proxy by
 supplying its address explicitly:
