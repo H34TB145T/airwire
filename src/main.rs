@@ -7,6 +7,7 @@ mod relay;
 mod tor;
 mod tui;
 mod tunnel;
+mod update;
 
 use std::{net::SocketAddr, path::PathBuf};
 
@@ -30,6 +31,11 @@ use crate::{
 async fn main() -> Result<()> {
     init_logging();
     let mut cli = Cli::parse();
+
+    if cli.update {
+        update::start()?;
+        return Ok(());
+    }
 
     if let Some(invitation) = cli.invite.clone() {
         let invitation = parse_compact_invite(&invitation)?;

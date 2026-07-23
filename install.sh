@@ -65,28 +65,30 @@ tar -xzf "$temporary_directory/$asset" -C "$temporary_directory"
 mkdir -p "$INSTALL_DIR"
 install -m 755 "$temporary_directory/airwire" "$INSTALL_DIR/airwire"
 
-case ":${PATH:-}:" in
-    *":$INSTALL_DIR:"*) ;;
-    *)
-        shell_name="$(basename "${SHELL:-sh}")"
-        case "$shell_name" in
-            zsh) profile="$HOME/.zshrc" ;;
-            bash)
-                if [ "$(uname -s)" = "Darwin" ]; then
-                    profile="$HOME/.bash_profile"
-                else
-                    profile="$HOME/.bashrc"
-                fi
-                ;;
-            *) profile="$HOME/.profile" ;;
-        esac
-        {
-            printf '\n# Airwire command\n'
-            printf 'export PATH="%s:$PATH"\n' "$INSTALL_DIR"
-        } >>"$profile"
-        printf 'Added %s to PATH in %s.\n' "$INSTALL_DIR" "$profile"
-        ;;
-esac
+if [ "${AIRWIRE_NO_PATH_UPDATE:-}" != "1" ]; then
+    case ":${PATH:-}:" in
+        *":$INSTALL_DIR:"*) ;;
+        *)
+            shell_name="$(basename "${SHELL:-sh}")"
+            case "$shell_name" in
+                zsh) profile="$HOME/.zshrc" ;;
+                bash)
+                    if [ "$(uname -s)" = "Darwin" ]; then
+                        profile="$HOME/.bash_profile"
+                    else
+                        profile="$HOME/.bashrc"
+                    fi
+                    ;;
+                *) profile="$HOME/.profile" ;;
+            esac
+            {
+                printf '\n# Airwire command\n'
+                printf 'export PATH="%s:$PATH"\n' "$INSTALL_DIR"
+            } >>"$profile"
+            printf 'Added %s to PATH in %s.\n' "$INSTALL_DIR" "$profile"
+            ;;
+    esac
+fi
 
 "$INSTALL_DIR/airwire" --version
 printf 'Installed Airwire to %s\n' "$INSTALL_DIR/airwire"
