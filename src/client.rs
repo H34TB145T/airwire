@@ -866,7 +866,7 @@ async fn connect_with_retry(
         };
         match connection {
             Ok(socket) => return Ok(socket),
-            Err(error) if retry && tokio::time::Instant::now() < deadline => {
+            Err(_error) if retry && tokio::time::Instant::now() < deadline => {
                 if attempt == 1 {
                     let _ = events
                         .try_send(UiEvent::Status("waiting for the Tor onion service…".into()));
