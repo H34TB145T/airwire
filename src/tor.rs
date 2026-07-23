@@ -448,17 +448,19 @@ fn parse_bootstrap_percent(line: &str) -> Option<u8> {
 }
 
 fn validate_onion_hostname(hostname: &str) -> Result<&str> {
-    let service_id = hostname
-        .strip_suffix(".onion")
-        .ok_or_else(|| anyhow!("Tor returned an invalid onion hostname"))?;
-    if service_id.len() != 56
-        || !service_id
-            .bytes()
-            .all(|byte| byte.is_ascii_lowercase() || (b'2'..=b'7').contains(&byte))
-    {
+    if !is_valid_v3_onion_hostname(hostname) {
         bail!("Tor returned an invalid v3 onion hostname");
     }
     Ok(hostname)
+}
+
+pub(crate) fn is_valid_v3_onion_hostname(hostname: &str) -> bool {
+    hostname.strip_suffix(".onion").is_some_and(|service_id| {
+        service_id.len() == 56
+            && service_id
+                .bytes()
+                .all(|byte| byte.is_ascii_lowercase() || (b'2'..=b'7').contains(&byte))
+    })
 }
 
 fn format_recent_logs(logs: &Arc<Mutex<VecDeque<String>>>) -> String {

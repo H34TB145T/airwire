@@ -1,7 +1,7 @@
 use std::{
     io::{self, stdout},
     path::{Path, PathBuf},
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use anyhow::{Context, Result};
@@ -37,6 +37,7 @@ const MUTED: Color = Color::Rgb(126, 130, 138);
 const ACCENT: Color = Color::Rgb(119, 188, 183);
 const WARN: Color = Color::Rgb(214, 166, 96);
 const ERROR: Color = Color::Rgb(219, 112, 120);
+const DUPLICATE_KEY_WINDOW: Duration = Duration::from_millis(20);
 
 pub struct ViewConfig {
     pub code: String,
@@ -62,12 +63,39 @@ enum Tone {
 struct App {
     config: ViewConfig,
     input: String,
+    input_filter: KeyInputFilter,
     entries: Vec<Entry>,
     connection: String,
     secure: bool,
     peers: usize,
     should_quit: bool,
     progress: Option<String>,
+}
+
+#[derive(Default)]
+struct KeyInputFilter {
+    last_press: Option<(KeyCode, KeyModifiers, Instant)>,
+}
+
+impl KeyInputFilter {
+    fn accepts(&mut self, key: KeyEvent) -> bool {
+        self.accepts_at(key, Instant::now())
+    }
+
+    fn accepts_at(&mut self, key: KeyEvent, now: Instant) -> bool {
+        if key.kind != KeyEventKind::Press {
+            return false;
+        }
+        let is_duplicate = self.last_press.is_some_and(|(code, modifiers, previous)| {
+            code == key.code
+                && modifiers == key.modifiers
+                && now.saturating_duration_since(previous) <= DUPLICATE_KEY_WINDOW
+        });
+        if !is_duplicate {
+            self.last_press = Some((key.code, key.modifiers, now));
+        }
+        !is_duplicate
+    }
 }
 
 pub async fn run(
@@ -91,6 +119,7 @@ pub async fn run(
     let mut app = App {
         config,
         input: String::new(),
+        input_filter: KeyInputFilter::default(),
         entries,
         connection: "connecting…".into(),
         secure: false,
@@ -152,10 +181,7 @@ fn handle_terminal_event(
     audio: &mut Option<Audio>,
 ) {
     match event {
-        Event::Key(KeyEvent {
-            kind: KeyEventKind::Release,
-            ..
-        }) => {}
+        Event::Key(key) if !app.input_filter.accepts(key) => {}
         Event::Key(KeyEvent {
             code: KeyCode::Char('c'),
             modifiers,
@@ -547,6 +573,7 @@ mod tests {
                 startup_message: None,
             },
             input: String::new(),
+            input_filter: KeyInputFilter::default(),
             entries: Vec::new(),
             connection: "testing".into(),
             secure: true,
@@ -557,7 +584,7 @@ mod tests {
     }
 
     #[test]
-    fn ignores_windows_style_key_release_events() {
+    fn ignores_non_press_key_events() {
         let (network, _receiver) = mpsc::channel(1);
         let mut app = test_app();
         let mut audio = None;
@@ -582,8 +609,30 @@ mod tests {
             &network,
             &mut audio,
         );
+        handle_terminal_event(
+            Event::Key(KeyEvent::new_with_kind(
+                KeyCode::Char('a'),
+                KeyModifiers::NONE,
+                KeyEventKind::Repeat,
+            )),
+            &mut app,
+            &network,
+            &mut audio,
+        );
 
         assert_eq!(app.input, "a");
+    }
+
+    #[test]
+    fn suppresses_duplicate_press_records_without_losing_real_double_letters() {
+        let mut filter = KeyInputFilter::default();
+        let start = Instant::now();
+        let key =
+            KeyEvent::new_with_kind(KeyCode::Char('l'), KeyModifiers::NONE, KeyEventKind::Press);
+
+        assert!(filter.accepts_at(key, start));
+        assert!(!filter.accepts_at(key, start + Duration::from_millis(2)));
+        assert!(filter.accepts_at(key, start + DUPLICATE_KEY_WINDOW + Duration::from_millis(1)));
     }
 
     #[test]

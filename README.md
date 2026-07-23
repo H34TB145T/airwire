@@ -77,6 +77,8 @@ The host command automatically starts a local relay:
 ```sh
 airwire --start
 airwire --start --max-users 4
+# Short form:
+airwire -s
 ```
 
 Another terminal on the same machine can join with:
@@ -91,17 +93,27 @@ and run:
 
 ```sh
 airwire --start --cloudflared
+# Short form:
+airwire -s -f
 ```
 
-The footer prints the exact `AIRWIRE_RELAY=... airwire --connect CODE` command
-to share. Cloudflare Quick Tunnel URLs are temporary. The room code alone is
-enough only when everyone uses the same configured relay; code-to-endpoint
-discovery necessarily requires shared infrastructure.
+The footer prints a compact invitation shaped like:
+
+```sh
+airwire aB3xY9@paper-river
+```
+
+Airwire restores the `.trycloudflare.com` suffix and infers the secure
+WebSocket scheme and `/ws` path. Cloudflare Quick Tunnel URLs are temporary.
+The room code alone is enough only when everyone uses the same configured
+relay; code-to-endpoint discovery necessarily requires shared infrastructure.
 
 For an internet room carried entirely through Tor:
 
 ```sh
 airwire --start --tor-proxy
+# Short form:
+airwire -s -t
 ```
 
 Airwire finds Tor, offers to install it interactively on supported macOS/Linux
@@ -153,18 +165,22 @@ airwire --start --tor-proxy
 
 It launches a separate Tor process with temporary state and onion keys. Airwire
 stops that process and removes its temporary data when the room closes. The
-host receives a guest command shaped like:
+host receives a compact guest command shaped like:
 
 ```sh
-airwire --connect aB3xY9 --relay ws://ADDRESS.onion/ws --tor-proxy
+airwire aB3xY9@ONION_SERVICE_ID
 ```
 
-The guest's bare `--tor-proxy` also starts an isolated Tor client
-automatically and retries while a fresh onion service propagates. Initial Tor
-connections can take around a minute. If Tor is outside `PATH`, use
-`--tor-binary /path/to/tor` or set `AIRWIRE_TOR_BINARY`. On Windows, Airwire
-also discovers the Expert Bundle installed by `install.ps1` and common Tor
-Browser locations.
+An `.onion` compact invitation automatically starts an isolated Tor client and
+retries while a fresh onion service propagates. Initial Tor connections can
+take around a minute. If Tor is outside `PATH`, use `--tor-binary /path/to/tor`
+or set `AIRWIRE_TOR_BINARY`. On Windows, Airwire also discovers the Expert
+Bundle installed by `install.ps1` and common Tor Browser locations.
+
+Tor v3 service IDs are intentionally 56 characters and cannot be shortened
+further without a separate lookup service. Compact invitations remove the
+`.onion` suffix, URL scheme, path, and command switches while keeping the
+connection direct and avoiding a third-party URL-shortener mapping.
 
 Advanced users may keep routing through an already-running SOCKS5 proxy by
 supplying its address explicitly:
